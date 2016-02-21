@@ -1,6 +1,7 @@
 #[macro_use(lift)]
 extern crate carboxyl;
 
+use std::sync::Arc;
 use carboxyl::{Signal, Stream};
 
 
@@ -30,9 +31,9 @@ pub trait Component {
     fn view(&self, Self::Context, Self::State) -> Self::View;
 }
 
-fn actions<C>(app: C, inputs: &Communication<C::Context, C::Event>)
+fn actions<C>(app: Arc<C>, inputs: &Communication<C::Context, C::Event>)
     -> Stream<C::Action>
-    where C: Component + Clone + Send + Sync + 'static,
+    where C: Component + Send + Sync + 'static,
           C::Action: Clone + Send + Sync + 'static,
           C::Context: Clone + Send + Sync + 'static,
           C::Event: Clone + Send + Sync + 'static
@@ -42,17 +43,17 @@ fn actions<C>(app: C, inputs: &Communication<C::Context, C::Event>)
         .filter_some()
 }
 
-fn state<C>(app: C, actions: Stream<C::Action>) -> Signal<C::State>
-    where C: Component + Clone + Send + Sync + 'static,
+fn state<C>(app: Arc<C>, actions: Stream<C::Action>) -> Signal<C::State>
+    where C: Component + Send + Sync + 'static,
           C::Action: Clone + Send + Sync + 'static,
           C::State: Clone + Send + Sync + 'static
 {
     actions.fold(app.init(), move |x, y| app.update(x, y))
 }
 
-fn view<C>(app: C, context: &Signal<C::Context>, state: &Signal<C::State>)
+fn view<C>(app: Arc<C>, context: &Signal<C::Context>, state: &Signal<C::State>)
     -> Signal<C::View>
-    where C: Component + Clone + Send + Sync + 'static,
+    where C: Component + Send + Sync + 'static,
           C::State: Clone + Send + Sync + 'static,
           C::Context: Clone + Send + Sync + 'static,
           C::View: Clone + Send + Sync + 'static
@@ -63,13 +64,14 @@ fn view<C>(app: C, context: &Signal<C::Context>, state: &Signal<C::State>)
 
 pub fn start<C>(app: C, inputs: Communication<C::Context, C::Event>)
     -> Communication<C::View, ()>
-    where C: Component + Clone + Send + Sync + 'static,
+    where C: Component + Send + Sync + 'static,
           C::Action: Clone + Send + Sync + 'static,
           C::State: Clone + Send + Sync + 'static,
           C::Context: Clone + Send + Sync + 'static,
           C::Event: Clone + Send + Sync + 'static,
           C::View: Clone + Send + Sync + 'static
 {
+    let app = Arc::new(app);
     Communication {
         context: view(app.clone(), &inputs.context, &state(
             app.clone(),
