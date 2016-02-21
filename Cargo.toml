@@ -2,6 +2,11 @@
 name = "benzene"
 version = "0.1.0"
 authors = ["Eduard Bopp <eduard.bopp@aepsil0n.de>"]
+repository = "https://github.com/aepsil0n/benzene"
+description = """Abstractions for a functional reactive application architecture
+using Carboxyl
+"""
+license = "LGPL-3.0+"
 
 [dependencies]
 carboxyl = "0.2"
