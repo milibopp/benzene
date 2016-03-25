@@ -1,6 +1,6 @@
 [package]
 name = "benzene"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Eduard Bopp <eduard.bopp@aepsil0n.de>"]
 repository = "https://github.com/aepsil0n/benzene"
 description = """Abstractions for a functional reactive application architecture
