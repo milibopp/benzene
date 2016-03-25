@@ -20,14 +20,9 @@ pub struct Communication<Context, Event> {
 
 pub trait Component {
     type Context;
-    type Event;
     type Action;
     type State;
     type View;
-
-    fn intent(&self, _: Self::Context, _: Self::Event) -> Option<Self::Action> {
-        None
-    }
 
     fn init(&self) -> Self::State;
 
@@ -38,9 +33,17 @@ pub trait Component {
     fn view(&self, Self::Context, Self::State) -> Self::View;
 }
 
+pub trait Application: Component {
+    type Event;
+
+    fn intent(&self, _: Self::Context, _: Self::Event) -> Option<Self::Action> {
+        None
+    }
+}
+
 fn actions<C>(app: Arc<C>, inputs: &Communication<C::Context, C::Event>)
     -> Stream<C::Action>
-    where C: Component + Send + Sync + 'static,
+    where C: Application + Send + Sync + 'static,
           C::Action: Clone + Send + Sync + 'static,
           C::Context: Clone + Send + Sync + 'static,
           C::Event: Clone + Send + Sync + 'static
@@ -71,7 +74,7 @@ fn view<C>(app: Arc<C>, context: &Signal<C::Context>, state: &Signal<C::State>)
 
 pub fn start<C>(app: C, inputs: Communication<C::Context, C::Event>)
     -> Communication<C::View, ()>
-    where C: Component + Send + Sync + 'static,
+    where C: Application + Send + Sync + 'static,
           C::Action: Clone + Send + Sync + 'static,
           C::State: Clone + Send + Sync + 'static,
           C::Context: Clone + Send + Sync + 'static,
