@@ -25,9 +25,16 @@ pub trait Component {
     type State;
     type View;
 
-    fn intent(&self, Self::Context, Self::Event) -> Option<Self::Action>;
+    fn intent(&self, _: Self::Context, _: Self::Event) -> Option<Self::Action> {
+        None
+    }
+
     fn init(&self) -> Self::State;
-    fn update(&self, Self::State, Self::Action) -> Self::State;
+
+    fn update(&self, current: Self::State, _: Self::Action) -> Self::State {
+        current
+    }
+
     fn view(&self, Self::Context, Self::State) -> Self::View;
 }
 
