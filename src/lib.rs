@@ -26,7 +26,7 @@ pub trait Component {
 
     fn init(&self) -> Self::State;
 
-    fn update(&self, current: Self::State, _: Self::Action) -> Self::State {
+    fn update(&self, current: Self::State, Self::Action) -> Self::State {
         current
     }
 
@@ -35,8 +35,13 @@ pub trait Component {
 
 pub trait Application: Component {
     type Event;
+    type Effect;
 
     fn intent(&self, _: Self::Context, _: Self::Event) -> Option<Self::Action> {
+        None
+    }
+
+    fn effect(&self, _: Self::State, _: Self::Action) -> Option<Self::Effect> {
         None
     }
 }
@@ -53,7 +58,7 @@ fn actions<C>(app: Arc<C>, inputs: &Communication<C::Context, C::Event>)
         .filter_some()
 }
 
-fn state<C>(app: Arc<C>, actions: Stream<C::Action>) -> Signal<C::State>
+fn state<C>(app: Arc<C>, actions: &Stream<C::Action>) -> Signal<C::State>
     where C: Component + Send + Sync + 'static,
           C::Action: Clone + Send + Sync + 'static,
           C::State: Clone + Send + Sync + 'static
@@ -73,20 +78,20 @@ fn view<C>(app: Arc<C>, context: &Signal<C::Context>, state: &Signal<C::State>)
 
 
 pub fn start<C>(app: C, inputs: Communication<C::Context, C::Event>)
-    -> Communication<C::View, ()>
+    -> Communication<C::View, C::Effect>
     where C: Application + Send + Sync + 'static,
           C::Action: Clone + Send + Sync + 'static,
           C::State: Clone + Send + Sync + 'static,
           C::Context: Clone + Send + Sync + 'static,
           C::Event: Clone + Send + Sync + 'static,
-          C::View: Clone + Send + Sync + 'static
+          C::View: Clone + Send + Sync + 'static,
+          C::Effect: Clone + Send + Sync + 'static
 {
     let app = Arc::new(app);
+    let actions = actions(app.clone(), &inputs);
+    let state = state(app.clone(), &actions);
     Communication {
-        context: view(app.clone(), &inputs.context, &state(
-            app.clone(),
-            actions(app.clone(), &inputs)
-        )),
-        events: Stream::never()
+        context: view(app.clone(), &inputs.context, &state),
+        events: state.snapshot(&actions, move |a, b| app.effect(a, b)).filter_some()
     }
 }
