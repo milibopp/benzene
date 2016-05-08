@@ -1,7 +1,6 @@
 #[macro_use(lift)]
 extern crate carboxyl;
 
-use std::sync::Arc;
 use carboxyl::{Signal, Stream};
 
 
@@ -18,64 +17,42 @@ pub struct Communication<Context, Event> {
     pub events: Stream<Event>
 }
 
-/*pub struct Component<State, Update, View> {
+pub struct Component<State, Update, View> {
     pub init: State,
     pub update: Update,
     pub view: View
-}*/
-
-pub trait Component {
-    type Context;
-    type Action;
-    type State;
-    type View;
-
-    fn init(&self) -> Self::State;
-
-    fn update(&self, current: Self::State, Self::Action) -> Self::State {
-        current
-    }
-
-    fn view(&self, Self::Context, Self::State) -> Self::View;
 }
 
-pub trait Application: Component {
-    type Event;
-    type Effect;
-
-    fn intent(&self, _: Self::Context, _: Self::Event) -> Option<Self::Action> {
-        None
-    }
-
-    fn effect(&self, _: Self::State, _: Self::Action) -> Option<Self::Effect> {
-        None
-    }
+pub struct Application<Component, Intent, Effect> {
+    pub component: Component,
+    pub intent: Intent,
+    pub effect: Effect
 }
 
-pub fn start<C>(app: C, inputs: Communication<C::Context, C::Event>)
-    -> Communication<C::View, C::Effect>
-    where C: Application + Send + Sync + 'static,
-          C::Action: Clone + Send + Sync + 'static,
-          C::State: Clone + Send + Sync + 'static,
-          C::Context: Clone + Send + Sync + 'static,
-          C::Event: Clone + Send + Sync + 'static,
-          C::View: Clone + Send + Sync + 'static,
-          C::Effect: Clone + Send + Sync + 'static
+pub fn start<State, Action, Update, View, Intent, Effect, Context, Event, ViewOut, EffectOut>(
+        app: Application<Component<State, Update, View>, Intent, Effect>,
+        inputs: Communication<Context, Event>)
+        -> Communication<ViewOut, EffectOut>
+    where Action: Clone + Send + Sync + 'static,
+          State: Clone + Send + Sync + 'static,
+          Context: Clone + Send + Sync + 'static,
+          Event: Clone + Send + Sync + 'static,
+          ViewOut: Clone + Send + Sync + 'static,
+          EffectOut: Clone + Send + Sync + 'static,
+          Update: Fn(State, Action) -> State + Send + Sync + 'static,
+          View: Fn(Context, State) -> ViewOut + Send + Sync + 'static,
+          Intent: Fn(Context, Event) -> Option<Action> + Send + Sync + 'static,
+          Effect: Fn(State, Action) -> Option<EffectOut> + Send + Sync + 'static
 {
-    // Stupid boilerplate!!!
-    let app = Arc::new(app);
-    let intent = { let app = app.clone(); move |x, y| app.intent(x, y) };
-    let update = { let app = app.clone(); move |x, y| app.update(x, y) };
-    let view = { let app = app.clone(); move |x, y| app.view(x, y) };
-    let init = app.init();
-
-    // Logic
+    let Application {
+        component: Component { init, update, view },
+        intent, effect } = app;
     let actions = inputs.context
         .snapshot(&inputs.events, intent)
         .filter_some();
     let state = actions.fold(init, update);
     Communication {
         context: lift!(view, &inputs.context, &state),
-        events: state.snapshot(&actions, move |a, b| app.effect(a, b)).filter_some()
+        events: state.snapshot(&actions, effect).filter_some()
     }
 }
