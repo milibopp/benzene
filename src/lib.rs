@@ -18,6 +18,12 @@ pub struct Communication<Context, Event> {
     pub events: Stream<Event>
 }
 
+/*pub struct Component<State, Update, View> {
+    pub init: State,
+    pub update: Update,
+    pub view: View
+}*/
+
 pub trait Component {
     type Context;
     type Action;
@@ -46,37 +52,6 @@ pub trait Application: Component {
     }
 }
 
-fn actions<C>(app: Arc<C>, inputs: &Communication<C::Context, C::Event>)
-    -> Stream<C::Action>
-    where C: Application + Send + Sync + 'static,
-          C::Action: Clone + Send + Sync + 'static,
-          C::Context: Clone + Send + Sync + 'static,
-          C::Event: Clone + Send + Sync + 'static
-{
-    inputs.context
-        .snapshot(&inputs.events, move |x, y| app.intent(x, y))
-        .filter_some()
-}
-
-fn state<C>(app: Arc<C>, actions: &Stream<C::Action>) -> Signal<C::State>
-    where C: Component + Send + Sync + 'static,
-          C::Action: Clone + Send + Sync + 'static,
-          C::State: Clone + Send + Sync + 'static
-{
-    actions.fold(app.init(), move |x, y| app.update(x, y))
-}
-
-fn view<C>(app: Arc<C>, context: &Signal<C::Context>, state: &Signal<C::State>)
-    -> Signal<C::View>
-    where C: Component + Send + Sync + 'static,
-          C::State: Clone + Send + Sync + 'static,
-          C::Context: Clone + Send + Sync + 'static,
-          C::View: Clone + Send + Sync + 'static
-{
-    lift!(move |x, y| app.view(x, y), context, state)
-}
-
-
 pub fn start<C>(app: C, inputs: Communication<C::Context, C::Event>)
     -> Communication<C::View, C::Effect>
     where C: Application + Send + Sync + 'static,
@@ -87,11 +62,20 @@ pub fn start<C>(app: C, inputs: Communication<C::Context, C::Event>)
           C::View: Clone + Send + Sync + 'static,
           C::Effect: Clone + Send + Sync + 'static
 {
+    // Stupid boilerplate!!!
     let app = Arc::new(app);
-    let actions = actions(app.clone(), &inputs);
-    let state = state(app.clone(), &actions);
+    let intent = { let app = app.clone(); move |x, y| app.intent(x, y) };
+    let update = { let app = app.clone(); move |x, y| app.update(x, y) };
+    let view = { let app = app.clone(); move |x, y| app.view(x, y) };
+    let init = app.init();
+
+    // Logic
+    let actions = inputs.context
+        .snapshot(&inputs.events, intent)
+        .filter_some();
+    let state = actions.fold(init, update);
     Communication {
-        context: view(app.clone(), &inputs.context, &state),
+        context: lift!(view, &inputs.context, &state),
         events: state.snapshot(&actions, move |a, b| app.effect(a, b)).filter_some()
     }
 }
