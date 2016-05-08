@@ -17,42 +17,47 @@ pub struct Communication<Context, Event> {
     pub events: Stream<Event>
 }
 
-pub struct Component<State, Update, View> {
+pub struct Component<State, Update, View, Effect> {
     pub init: State,
     pub update: Update,
-    pub view: View
-}
-
-pub struct Application<Component, Intent, Effect> {
-    pub component: Component,
-    pub intent: Intent,
+    pub view: View,
     pub effect: Effect
 }
 
-pub fn start<State, Action, Update, View, Intent, Effect, Context, Event, ViewOut, EffectOut>(
-        app: Application<Component<State, Update, View>, Intent, Effect>,
-        inputs: Communication<Context, Event>)
-        -> Communication<ViewOut, EffectOut>
-    where Action: Clone + Send + Sync + 'static,
-          State: Clone + Send + Sync + 'static,
-          Context: Clone + Send + Sync + 'static,
+pub fn interpret<Context, Event, Action, Intent>(
+        inputs: Communication<Context, Event>, intent: Intent)
+        -> Communication<Context, Action>
+    where Context: Clone + Send + Sync + 'static,
           Event: Clone + Send + Sync + 'static,
-          ViewOut: Clone + Send + Sync + 'static,
-          EffectOut: Clone + Send + Sync + 'static,
-          Update: Fn(State, Action) -> State + Send + Sync + 'static,
-          View: Fn(Context, State) -> ViewOut + Send + Sync + 'static,
-          Intent: Fn(Context, Event) -> Option<Action> + Send + Sync + 'static,
-          Effect: Fn(State, Action) -> Option<EffectOut> + Send + Sync + 'static
+          Action: Clone + Send + Sync + 'static,
+          Intent: Fn(Context, Event) -> Option<Action> + Send + Sync + 'static
 {
-    let Application {
-        component: Component { init, update, view },
-        intent, effect } = app;
-    let actions = inputs.context
+    let events = inputs.context
         .snapshot(&inputs.events, intent)
         .filter_some();
-    let state = actions.fold(init, update);
+    Communication {
+        context: inputs.context,
+        events: events
+    }
+}
+
+pub fn start<Context, Event, State, Update, View, Effect, ViewOut, EffectOut>(
+        app: Component<State, Update, View, Effect>,
+        inputs: Communication<Context, Event>)
+        -> Communication<ViewOut, EffectOut>
+    where Event: Clone + Send + Sync + 'static,
+          State: Clone + Send + Sync + 'static,
+          Context: Clone + Send + Sync + 'static,
+          ViewOut: Clone + Send + Sync + 'static,
+          EffectOut: Clone + Send + Sync + 'static,
+          Update: Fn(State, Event) -> State + Send + Sync + 'static,
+          View: Fn(Context, State) -> ViewOut + Send + Sync + 'static,
+          Effect: Fn(State, Event) -> Option<EffectOut> + Send + Sync + 'static
+{
+    let Component { init, update, view, effect } = app;
+    let state = inputs.events.fold(init, update);
     Communication {
         context: lift!(view, &inputs.context, &state),
-        events: state.snapshot(&actions, effect).filter_some()
+        events: state.snapshot(&inputs.events, effect).filter_some()
     }
 }
